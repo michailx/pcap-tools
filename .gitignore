@@ -2,6 +2,7 @@
 /dat/**
 /pcap/**
 /png/**
+/.idea/**
 
 # Python byte code #
 *.pyc
