@@ -1,0 +1,7 @@
+# All files in directories #
+/dat/**
+/pcap/**
+/png/**
+
+# Python byte code #
+*.pyc
