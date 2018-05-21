@@ -7,7 +7,10 @@ import sys
 
 def get_pcap_stas(input_pcap):
     """
-    Whatever may roam
+    Reads a pcap file and returns a list of tuples. Each tuple represents a time window of 1-second and its values are
+    the (total_number_of_bits, total_number_of_frames) during that second.
+    For example, if list element 7 has value (30000, 5) this means that the input pcap has 5 frames of total 30000 bits
+    during that second.
     """
     result = []
 
@@ -18,18 +21,24 @@ def get_pcap_stas(input_pcap):
         print "Exception while loading pcap file:", ex
         return []
 
-    # No packets dumped
+    # No frames dumped
     if not pcap_loader:
         print "Loaded pcap file:", input_pcap, "is empty."
         return []
 
-    # Read packet by packet
-    timeslot = 0
+    # Read frame-by-frame
+    first_frame_flag = True
+    timeslot = 0  # This value will never be used
     bytes_counter = 0
     packets_counter = 0
 
     for timestamp, frame in pcap_loader:
         timestamp = int(timestamp)  # Floor of timestamp, don't care for milliseconds
+
+        if first_frame_flag:
+            timeslot = timestamp
+            first_frame_flag = False
+            print "First frame had timestamp", timestamp, "and length", len(frame)
 
         while timestamp > timeslot:
             # Save result for current time slot
@@ -47,6 +56,7 @@ def get_pcap_stas(input_pcap):
     # Above for loop will miss to append the last timestamp
     result.append((bytes_counter * 8, packets_counter))
 
+    print "Input trace was", len(result), "seconds long. I have summarized the results..."
     return result
 
 
