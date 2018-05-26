@@ -87,7 +87,7 @@ def _get_trace_apps(ports=set()):
             elif high:
                 apps[(ip_proto, high_port)] = high
             else:
-                # Both ports are > 1023 and not registed by IANA. Do nothing for this tuple of ports.
+                # Both ports are > 1023 and not assigned by IANA. Do nothing for this tuple of ports.
                 pass
         else:
             # Other IP_PROTO
@@ -103,7 +103,8 @@ def get_trace_stats(input_pcap, known_apps):
     For example, if list element 7 has value (30000, 5) this means that the input pcap has 5 frames of total 30000 bits
     during that second.
     """
-    result = []
+    pkt_series = []
+    bit_series = []
     apps_list = known_apps.values() + ['tcp_other', 'udp_other', 'app_other']
 
     # Load the pcap file into a Python object
@@ -145,7 +146,8 @@ def get_trace_stats(input_pcap, known_apps):
 
         while timestamp > timeslot:
             # Save result for current time slot
-            result.append((pkt_counters, bit_counters))
+            pkt_series.append(pkt_counters)
+            bit_series.append(bit_counters)
             # Next time slot
             timeslot += 1
             # Reset counters
@@ -157,10 +159,11 @@ def get_trace_stats(input_pcap, known_apps):
         bit_counters[app] += len(buf)*8  # This will also include the bits of the Layer2 header
 
     # Above FOR loop will miss to append the last timestamp
-    result.append((pkt_counters, bit_counters))
+    pkt_series.append(pkt_counters)
+    bit_series.append(bit_counters)
 
-    print "Input trace was", len(result), "seconds long. I have summarized the results..."
-    return result
+    print "Input trace was", len(pkt_series), "seconds long. I have summarized the results..."
+    return pkt_series, bit_series
 
 
 def _getprotobynumber(ip_proto):
@@ -193,6 +196,27 @@ def _getservbyport(tsp_port, ip_proto):
         return app_name
 
 
+def _export_stats_file(counters_list, output_file):
+    """
+    Export statistics to a text file that read and plotted by Gnuplot.
+    """
+    # Get column names:
+    if len(counters_list):
+        # counters_list[0] is a Python dictionary
+        columns_list = counters_list[0].keys()
+    else:
+        # FIXME: Throw some error as no stats were gathered
+        columns_list = []
+
+    with open(output_file, 'w') as f:
+        f.write('# TIME ' + ' '.join(columns_list) + '\n')
+        for timeslot, stats_dict in enumerate(counters_list):
+            line = ''
+            for column in columns_list:
+                line += ' ' + str(stats_dict[column])
+            f.write(str(timeslot) + line + '\n')
+
+
 if __name__ == "__main__":
     print "Running script", sys.argv[0]
     print "User provided", (len(sys.argv)-1), "command-line arguments:"
@@ -211,23 +235,8 @@ if __name__ == "__main__":
     # The index (keys) of this list is the elapsed time in seconds, i.e., the x-axis of a time series graph.
     # The elements (values) of this list is a tuple with two elements: the number of bits and the number of packets
     # during that second, i.e., (bits, packets). E.g., histogram = [(12000, 1), (36000, 3), ... ]
-    histogram = get_trace_stats(user_input['input_file'], apps)
-    print(histogram)
+    pps, bps = get_trace_stats(user_input['input_file'], apps)
 
     # Write result to external file
-    columns = apps.values()
-    with open(user_input['output_file'] + '_pkts', 'w') as f:
-        f.write('# TIME ' + ' '.join(columns) + '\n')
-        for timeslot, (packets, _) in enumerate(histogram):
-            line = ''
-            for column in columns:
-                line += ' ' + str(packets[column])
-            f.write(str(timeslot) + line + '\n')
-
-    with open(user_input['output_file'] + '_bits', 'w') as f:
-        f.write('# TIME ' + ' '.join(columns) + '\n')
-        for timeslot, (_, bits) in enumerate(histogram):
-            line = ''
-            for column in columns:
-                line += ' ' + str(bits[column])
-            f.write(str(timeslot) + line + '\n')
+    _export_stats_file(pps, user_input['output_file'] + '_pps')
+    _export_stats_file(bps, user_input['output_file'] + '_bps')
