@@ -4,32 +4,51 @@
 import dpkt
 import pcap
 import sys
+from heapq import nlargest
 from socket import getservbyport
 from socket import error
+from collections import OrderedDict
 
 
-def _get_pkt_ports(ip_pkt):
+def _get_ip_pkt_ports(buf, timestamp=None):
     """
     Scans the IP packet and returns tuple (IP_PROTO, L4_LOW_PORT, L4_HIGH_PORT) for UDP or TCP segment. Otherwise
     returns tuple (IP_PROTO, None, None).
     """
+    ether_frame = dpkt.ethernet.Ethernet(buf)  # Get Ethernet frame
+    ip_pkt = ether_frame.data  # Get IPv4 Packet
+
     if ip_pkt.p in [dpkt.ip.IP_PROTO_TCP, dpkt.ip.IP_PROTO_UDP]:
         # Get Layer4 PDU
         transport = ip_pkt.data
+        try:
+            # FIXME: Check if src < 1023 < dst OR src > 1023 > dst, in an attempt to add less tuples to the set()
+            # FIXME: The basis for this assumption is the client<>server model where client port > 1023 whereas
+            # FIXME: the server is using a well-known port < 1024.
+            if (transport.sport < 1024) and (transport.dport >= 1024):
+                #
+                result = (ip_pkt.p, transport.sport, None)
+            elif (transport.dport < 1024) and (transport.sport >= 1024):
+                #
+                result = (ip_pkt.p, transport.dport, None)
+            else:
+                # FIXME: Adding both ports in the tuple since checks above were inconclusive.
+                if transport.sport < transport.dport:
+                    # Always put the lower port nbr in position tuple[1]. This will avoid duplicates.
+                    result = (ip_pkt.p, transport.sport, transport.dport)
+                else:
+                    result = (ip_pkt.p, transport.dport, transport.sport)
 
-        if transport.sport < transport.dport:
-            # Always put the lower port nbr in position tuple[1]. This will avoid duplicates.
-            result = (ip_pkt.p, transport.sport, transport.dport)
-        else:
-            result = (ip_pkt.p, transport.dport, transport.sport)
-
+        except AttributeError as ex:
+            print "Exception at time", timestamp, ", ERROR:", ex
+            result = (ip_pkt.p, None, None)
     else:
         result = (ip_pkt.p, None, None)
 
     return result
 
 
-def _get_trace_ports(input_pcap):
+def _scan_trace_ports(input_pcap):
     """
     Reads a pcap file returns a list of tuples. Each tuple is a unique (IP_PROTO, LOW_PORT, HIGH_PORT) where LOW_PORT
     and HIGH_PORT are both UDP/TCP ports and LOW_PORT is simply a smaller number than HIGH_PORT. The latter happens to
@@ -49,12 +68,10 @@ def _get_trace_ports(input_pcap):
         print "Loaded pcap file:", input_pcap, "is empty."
         return []
 
-    for _, buf in pcap_loader:
-        ether_frame = dpkt.ethernet.Ethernet(buf)  # Get Ethernet frame
-        ip_pkt = ether_frame.data  # Get IPv4 Packet
-        scan.add(_get_pkt_ports(ip_pkt))
+    for time, buf in pcap_loader:
+        result = _get_ip_pkt_ports(buf, time)
+        scan.add(result)
 
-    print 'All ports', len(scan)
     return scan
 
 
@@ -71,18 +88,36 @@ def _get_trace_apps(ports=set()):
     for (ip_proto, low_port, high_port) in ports:
         if ip_proto in [dpkt.ip.IP_PROTO_TCP, dpkt.ip.IP_PROTO_UDP]:
             # TCP or UDP packet
-            # FIXME: Assumption; prioritize low_port
+
+            # Check if low_port is already cached (i.e., added to apps dict. If yes, continue to next iteration.
             if (ip_proto, low_port) in apps.keys():
                 continue
+
+            # Since low_port not cached, check if IANA has assigned this port to an application.
             low = _getservbyport(low_port, ip_proto)
-            high = _getservbyport(high_port, ip_proto)
+            # Check if this port is both assigned by IANA and in range (1,1023). If yes, store and continue to next
+            # iteration.
             if (low_port < 1024) and low:
                 # This is a well-known port
                 apps[(ip_proto, low_port)] = low
-            elif (high_port < 1024) and high:
+                continue
+
+            # Check if high_port is already cached. If yes, continue to next iteration.
+            if (ip_proto, high_port) in apps.keys():
+                continue
+
+            # Since high_port not cached, check if IANA has assigned this port to an application.
+            high = _getservbyport(high_port, ip_proto)
+
+            # Check if this port is both assigned by IANA and in range (1,1023). If yes, store and continue to next
+            # iteration.
+            if (high_port < 1024) and high:
                 # This is a well-known port
                 apps[(ip_proto, high_port)] = high
-            elif low:
+                continue
+
+            # Last check:
+            if low:
                 apps[(ip_proto, low_port)] = low
             elif high:
                 apps[(ip_proto, high_port)] = high
@@ -96,7 +131,7 @@ def _get_trace_apps(ports=set()):
     return apps
 
 
-def get_trace_stats(input_pcap, known_apps):
+def _get_trace_stats(input_pcap, known_apps, n=5):
     """
     Reads a pcap file and returns a list of tuples. Each tuple represents a time window of 1-second and its values are
     the (total_number_of_bits, total_number_of_frames) during that second.
@@ -105,7 +140,7 @@ def get_trace_stats(input_pcap, known_apps):
     """
     pkt_series = []
     bit_series = []
-    apps_list = known_apps.values() + ['tcp_other', 'udp_other', 'app_other']
+    apps_list = known_apps.values() + ['tcp-other', 'udp-other', 'app-other', 'total']
 
     # Load the pcap file into a Python object
     try:
@@ -124,18 +159,18 @@ def get_trace_stats(input_pcap, known_apps):
     pkt_counters = dict.fromkeys(apps_list, 0)
     bit_counters = dict.fromkeys(apps_list, 0)
 
+    grand_total_pkts = dict.fromkeys(apps_list, 0)
+
     for timestamp, buf in pcap_loader:
         timestamp = int(timestamp)  # Floor the timestamp value, i.e., disregard milliseconds
-        ether_frame = dpkt.ethernet.Ethernet(buf)  # Get Ethernet frame
-        ip_pkt = ether_frame.data  # Get IPv4 Packet
-        (ip_proto, low_port, high_port) = _get_pkt_ports(ip_pkt)  # (IP_PROTO, L4_LOW_PORT, L4_HIGH_PORT)
+        (ip_proto, low_port, high_port) = _get_ip_pkt_ports(buf, timestamp)  # (IP_PROTO, L4_LOW_PORT, L4_HIGH_PORT)
         # FIXME: Assumption; prioritize low_port
         if (ip_proto, low_port) in known_apps.keys():
             app = known_apps[(ip_proto, low_port)]
         elif (ip_proto, high_port) in known_apps.keys():
             app = known_apps[(ip_proto, high_port)]
         else:
-            app = _getprotobynumber(ip_proto)+'_other'
+            app = _getprotobynumber(ip_proto)+'-other'
 
         if first_frame_flag:
             # The timestamp of the first frame in the trace might not be zero. It can be seconds since Epoch.
@@ -156,14 +191,49 @@ def get_trace_stats(input_pcap, known_apps):
 
         # timestamp == timeslot so increase the counters for this App
         pkt_counters[app] += 1
-        bit_counters[app] += len(buf)*8  # This will also include the bits of the Layer2 header
+        bit_counters[app] += len(buf) * 8  # This will also include the bits of the Layer2 header
+        # Increase counters 'total per second' and 'grand total'
+        pkt_counters['total'] += 1
+        bit_counters['total'] += len(buf) * 8
+        grand_total_pkts[app] += 1
 
     # Above FOR loop will miss to append the last timestamp
     pkt_series.append(pkt_counters)
     bit_series.append(bit_counters)
 
-    print "Input trace was", len(pkt_series), "seconds long. I have summarized the results..."
-    return pkt_series, bit_series
+    # Keep counters 'total' and top N apps according to their pps
+    # FIXME: Far too long code and difficult to interpret
+    # FIXME: Dict does not seem to be the right choice for counters
+    # FIXME: Check Counter object @ https://docs.python.org/2/library/collections.html
+    popular = ['total'] + _get_popular_apps(grand_total_pkts, n)
+    pkts_d = OrderedDict()
+    pkts_l = []
+    bits_d = OrderedDict()
+    bits_l = []
+    for t in xrange(0, len(pkt_series)):
+        for p in popular:
+            pkts_d[p] = pkt_series[t][p]  # Counter of popular app p at timeslot t
+            bits_d[p] = bit_series[t][p]
+        pkts_l.append(pkts_d)
+        bits_l.append(bits_d)
+        pkts_d = OrderedDict()
+        bits_d = OrderedDict()
+
+    print "Input trace was", len(pkts_l), "seconds long. I have summarized the results..."
+    return pkts_l, bits_l
+
+
+def _get_popular_apps(series_dict, n=5):
+    k = series_dict.keys()
+    v = series_dict.values()
+
+    popular = nlargest(n, v)  # Find n highest values; save them to new list popular
+
+    apps = []
+    for x in popular:
+        apps.append(k[v.index(x)])
+
+    return apps
 
 
 def _getprotobynumber(ip_proto):
@@ -196,7 +266,7 @@ def _getservbyport(tsp_port, ip_proto):
         return app_name
 
 
-def _export_stats_file(counters_list, output_file):
+def _export_stats(counters_list, output_file):
     """
     Export statistics to a text file that read and plotted by Gnuplot.
     """
@@ -205,11 +275,11 @@ def _export_stats_file(counters_list, output_file):
         # counters_list[0] is a Python dictionary
         columns_list = counters_list[0].keys()
     else:
-        # FIXME: Throw some error as no stats were gathered
         columns_list = []
+        raise Exception("Input list of counters is empty, so nothing to export to file. Exiting...")
 
     with open(output_file, 'w') as f:
-        f.write('# TIME ' + ' '.join(columns_list) + '\n')
+        f.write('TIME ' + ' '.join(columns_list) + '\n')
         for timeslot, stats_dict in enumerate(counters_list):
             line = ''
             for column in columns_list:
@@ -230,13 +300,17 @@ if __name__ == "__main__":
     print "* Input file (pcap):", user_input['input_file']
     print "* Output file (dat):", user_input['output_file']
 
-    apps = _get_trace_apps(_get_trace_ports(user_input['input_file']))
-    print apps
-    # The index (keys) of this list is the elapsed time in seconds, i.e., the x-axis of a time series graph.
-    # The elements (values) of this list is a tuple with two elements: the number of bits and the number of packets
-    # during that second, i.e., (bits, packets). E.g., histogram = [(12000, 1), (36000, 3), ... ]
-    pps, bps = get_trace_stats(user_input['input_file'], apps)
+    scanned_ports = _scan_trace_ports(user_input['input_file'])
+    print "Discovered,", len(scanned_ports), "ports (i.e., IP_PROTO, LOW_NBR_PORT, HIGH_NBR_PORT)."
+    apps = _get_trace_apps(scanned_ports)
+    print "Discovered", len(apps), "apps (i.e., IP_PROTO, PORT). Apps:", apps
 
+    pps, bps = _get_trace_stats(user_input['input_file'], apps)
+    # Both pps and bps are lists with index (keys) the elapsed time in seconds i.e., the x-axis of a time series.
+    # Each corresponding value is a dictionary holding the pps or bps of each application during that second.
+    # We are only interested in the top N apps.
+
+    print "Exporting statistics to files..."
     # Write result to external file
-    _export_stats_file(pps, user_input['output_file'] + '_pps')
-    _export_stats_file(bps, user_input['output_file'] + '_bps')
+    _export_stats(pps, user_input['output_file'] + '-pps.dat')
+    _export_stats(bps, user_input['output_file'] + '-bps.dat')

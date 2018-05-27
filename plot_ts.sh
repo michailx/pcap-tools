@@ -15,15 +15,11 @@ OUTPUT_FILE=$2
 
 # Step 1: Read trace and export statistics to a text file
 echo Reading pcap file $INPUT_FILE and generating traffic statistics \(bpps,pps\)...
-echo Will export these statistics to text file $OUTPUT_DAT_DIRECTORY/$OUTPUT_FILE.dat
-python ./pcap_stats.py $INPUT_FILE $OUTPUT_DAT_DIRECTORY/$OUTPUT_FILE.dat
+#python ./pcap_stats.py $INPUT_FILE $OUTPUT_DAT_DIRECTORY/$OUTPUT_FILE
 
 # Step 2: Read text file and generate two plots; one for bps and one for pps
+gnuplot -c template.gnuplot \
+$OUTPUT_DAT_DIRECTORY/$OUTPUT_FILE-pps.dat $OUTPUT_PNG_DIRECTORY/$OUTPUT_FILE-pps.png 5 pps
 
-# X-axis: Time (seconds), Y-axis: kbits per second
-gnuplot -c bits_template.gnuplot \
-$OUTPUT_DAT_DIRECTORY/$OUTPUT_FILE.dat $OUTPUT_PNG_DIRECTORY/$OUTPUT_FILE-kbps.png
-
-# X-axis: Time (seconds), Y-axis: Packets per second
-gnuplot -c pkts_template.gnuplot \
-$OUTPUT_DAT_DIRECTORY/$OUTPUT_FILE.dat $OUTPUT_PNG_DIRECTORY/$OUTPUT_FILE-pps.png
+gnuplot -c template.gnuplot \
+$OUTPUT_DAT_DIRECTORY/$OUTPUT_FILE-bps.dat $OUTPUT_PNG_DIRECTORY/$OUTPUT_FILE-bps.png 5 bps
