@@ -1,1 +1,8 @@
-# pcap-tools
+PCAP directory
+=========
+This directory holds all _.pcap_ files as exported by script [split_pcap.sh][split_script]
+
+For more information please refer to the [pcap-tools README][main_readme] file.
+
+[main_readme]: https://github.com/michailx/pcap-tools/blob/master/README.md
+[split_script]: https://github.com/michailx/pcap-tools/blob/master/split_pcap.sh
