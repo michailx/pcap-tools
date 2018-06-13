@@ -10,13 +10,77 @@ from socket import error
 from collections import OrderedDict
 
 
-def _get_ip_pkt_ports(buf, timestamp=None):
+def read_pcap_file(input_pcap):
+    """
+    Reads a packet trace, i.e. a pcap file, and returns a packet capture object (see pcap library).
+    """
+
+    # Load the pcap file into a Python object
+    try:
+        pcap_loader = pcap.pcap(input_pcap)
+    except Exception as ex:
+        print "Exception while loading pcap file:", ex
+        sys.exit()
+
+    # No frames dumped
+    if not pcap_loader:
+        print "Loaded pcap file:", input_pcap, "is empty."
+        sys.exit()
+
+    # Check data link protocol
+    if pcap_loader.datalink() == dpkt.pcap.DLT_EN10MB:
+        # Ethernet
+        print "Datalink is Ethernet"
+    elif pcap_loader.datalink() == dpkt.pcap.DLT_RAW:
+        # Raw
+        print "No Datalink protocol, i.e., Raw"
+    else:
+        print "Datalink is (value)", pcap_loader.datalink(), ". Don't know how to handle this, exiting..."
+        # See values here: https://github.com/pynetwork/pypcap/blob/master/pcap.pyx
+        sys.exit()
+
+    return pcap_loader
+
+
+def _get_ip_pkt(buf, datalink, timestamp=None):
+    """
+    Reads the buffer and removes all protocol headers until it finds the IPv4 header. Returns the IPv4 packet.
+    """
+    # Check data link protocol
+    if datalink == dpkt.pcap.DLT_EN10MB:
+        # Ethernet
+        ether_frame = dpkt.ethernet.Ethernet(buf)  # Get Ethernet frame
+        if ether_frame.type == dpkt.ethernet.ETH_TYPE_IP:
+            ip_pkt = ether_frame.data  # Get IPv4 Packet
+        else:
+            print "Ethernet Type is (value)", ether_frame.type, ". Don't know how to handle this, exiting..."
+            return None
+
+    elif datalink == dpkt.pcap.DLT_RAW:
+        # Raw
+        try:
+            ip_pkt = dpkt.ip.IP(buf)
+        except dpkt.UnpackError as ex:
+            print "Unpack error at time", timestamp, "ERR:", ex
+            return None
+    else:
+        print "Datalink is (value)", datalink, ". Don't know how to handle this, exiting..."
+        # See values here: https://github.com/pynetwork/pypcap/blob/master/pcap.pyx
+        return None
+
+    # Also need to check if packet is IPv4
+
+    return ip_pkt
+
+
+def _get_ip_pkt_ports(buf, datalink, timestamp=None):
     """
     Scans the IP packet and returns tuple (IP_PROTO, L4_LOW_PORT, L4_HIGH_PORT) for UDP or TCP segment. Otherwise
     returns tuple (IP_PROTO, None, None).
     """
-    ether_frame = dpkt.ethernet.Ethernet(buf)  # Get Ethernet frame
-    ip_pkt = ether_frame.data  # Get IPv4 Packet
+    ip_pkt = _get_ip_pkt(buf, datalink, timestamp)
+    if ip_pkt is None:
+        return None
 
     if ip_pkt.p in [dpkt.ip.IP_PROTO_TCP, dpkt.ip.IP_PROTO_UDP]:
         # Get Layer4 PDU
@@ -56,20 +120,12 @@ def _scan_trace_ports(input_pcap):
     """
     scan = set()
 
-    # Load the pcap file into a Python object
-    try:
-        pcap_loader = pcap.pcap(input_pcap)
-    except Exception as ex:
-        print "Exception while loading pcap file:", ex
-        return []
-
-    # No frames dumped
-    if not pcap_loader:
-        print "Loaded pcap file:", input_pcap, "is empty."
-        return []
+    pcap_loader = read_pcap_file(input_pcap)
 
     for time, buf in pcap_loader:
-        result = _get_ip_pkt_ports(buf, time)
+        result = _get_ip_pkt_ports(buf, pcap_loader.datalink(), time)
+        if result is None:
+            continue
         scan.add(result)
 
     return scan
@@ -142,17 +198,7 @@ def _get_trace_stats(input_pcap, known_apps, n=5):
     bit_series = []
     apps_list = known_apps.values() + ['tcp-other', 'udp-other', 'app-other', 'total']
 
-    # Load the pcap file into a Python object
-    try:
-        pcap_loader = pcap.pcap(input_pcap)
-    except Exception as ex:
-        print "Exception while loading pcap file:", ex
-        return []
-
-    # No frames dumped
-    if not pcap_loader:
-        print "Loaded pcap file:", input_pcap, "is empty."
-        return []
+    pcap_loader = read_pcap_file(input_pcap)
 
     # Read frame-by-frame
     first_frame_flag = True
@@ -163,7 +209,12 @@ def _get_trace_stats(input_pcap, known_apps, n=5):
 
     for timestamp, buf in pcap_loader:
         timestamp = int(timestamp)  # Floor the timestamp value, i.e., disregard milliseconds
-        (ip_proto, low_port, high_port) = _get_ip_pkt_ports(buf, timestamp)  # (IP_PROTO, L4_LOW_PORT, L4_HIGH_PORT)
+        result = _get_ip_pkt_ports(buf, pcap_loader.datalink(), timestamp)  # (IP_PROTO, L4_LOW_PORT, L4_HIGH_PORT)
+        if result is None:
+            continue
+        else:
+            (ip_proto, low_port, high_port) = result
+
         # FIXME: Assumption; prioritize low_port
         if (ip_proto, low_port) in known_apps.keys():
             app = known_apps[(ip_proto, low_port)]
@@ -224,6 +275,9 @@ def _get_trace_stats(input_pcap, known_apps, n=5):
 
 
 def _get_popular_apps(series_dict, n=5):
+    """
+    Reads a python dictionary and finds the n highest values. Returns a list with the corresponding keys.
+    """
     k = series_dict.keys()
     v = series_dict.values()
 
