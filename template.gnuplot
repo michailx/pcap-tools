@@ -16,13 +16,13 @@ set style line 1 lc rgb '#dd181f' lt 1 lw 1 pt 4 ps 1.25  # Red color
 set style line 2 lc rgb '#daa520' lt 1 lw 1 pt 5 ps 1.25  # Golden color
 set style line 3 lc rgb '#008080' lt 1 lw 1 pt 6 ps 1.25  # Green color
 set style line 4 lc rgb '#0060ad' lt 1 lw 1 pt 7 ps 1.25  # Blue color
-set style line 5 lc rgb '#ff00ff' lt 1 lw 1 pt 8 ps 1  # Magenta color
-set style line 6 lc rgb '#dc3912' lt 1 lw 1 pt 9 ps 1  # Dark Red color
+set style line 5 lc rgb '#ff00ff' lt 1 lw 1 pt 8 ps 1.25  # Magenta color
+set style line 6 lc rgb '#dc3912' lt 1 lw 1 pt 9 ps 1.25  # Dark Red color
 
-set title "Traffic bandwidth over time (".YAXIS_UNIT.")"
+set title "Traffic load over time (".YAXIS_UNIT.")"
 set xlabel "Time (seconds)"
 set ylabel "Bandwidth (".YAXIS_UNIT.")"
-set key outside center bottom horizontal
+set key outside top right vertical Left title 'Traffic type'
 set key autotitle columnheader
 set style data points
 plot for [i=2:SERIES_NBR] INTPUT_DATA using 1:i with points ls i-1
