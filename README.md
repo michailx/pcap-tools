@@ -18,7 +18,7 @@ In order to install all necessary programs and libraries on an Ubuntu machine, p
 
 In order to split a _.pcap_ file into smaller ones, please execute script:  
 ```bash
-./split_pcap.sh pcap/<INPUT_PCAP_FILENAME> <OUTPUT_PCAP_FILENAME_SUFFIX> <OUTPUT_PCAP_SIZE_MB>
+./split_pcap.sh pcap/<INPUT_PCAP_FILENAME> <OUTPUT_PCAP_FILENAME_PREFIX> <OUTPUT_PCAP_SIZE_MB>
 ```
 
 e.g., 
@@ -27,7 +27,8 @@ e.g.,
 ./split_pcap.sh pcap/caida-20140711-095700.UTC.pcap caida-2014 100
 ```
 
-will read _caida-20140711-095700.UTC.pcap_ and split it into smaller _.pcap_ files. Each file will have the suffix
+will read _caida-20140711-095700.UTC.pcap_ and split it into smaller _.pcap_ files.<br/>
+Each file will have the prefix
 _caida-2014-partXXX_ and will be 100MB in size.
 
 
@@ -36,7 +37,7 @@ _caida-2014-partXXX_ and will be 100MB in size.
 
 In order to read a _.pcap_ file and plot the traffic load per app (as already described), please execute script:  
 ```bash
-./plot_ts.sh pcap/<INPUT_PCAP_FILENAME> <OUTPUT_PNG_FILENAME_SUFFIX>
+./plot_ts.sh pcap/<INPUT_PCAP_FILENAME> <OUTPUT_PNG_FILENAME_PREFIX>
 ```
 
 e.g., 
