@@ -1,22 +1,29 @@
 #!/bin/bash
 
-OUTPUT_DAT_DIRECTORY=dat
-OUTPUT_PNG_DIRECTORY=png
+DAT_DIRECTORY=dat
+PNG_DIRECTORY=png
 
-echo User provided $# input arguments: $@
-if [ $# -ne 3 ]; then
-	echo Please provide 3 command-line arguments: INPUT_FILE, OUTPUT_FILE and NUM_SCALE
-	echo Example values: ./dat/uliege_in-bps.dat uliege_in-bps mega
+if [ $# -eq 1 ]; then
+    OUTPUT_NUM_SCALE=""
+elif [ $# -eq 2 ]; then
+    OUTPUT_NUM_SCALE=$2
+else
+	echo Please provide command-line arguments: INPUT_FILE and \(optional\) OUTPUT_NUM_SCALE
+	echo E.g.: uliege_in.ts.bps.dat mega
     exit
 fi
 
 INPUT_FILE=$1
-OUTPUT_FILE=$2-hist
-NUM_SCALE=$3
+IF_ARRAY=(${INPUT_FILE//./ })
+X_AXIS_UNIT=${OUTPUT_NUM_SCALE}${IF_ARRAY[2]}
+
+OUTPUT_FILE=${IF_ARRAY[0]}.histogram.${X_AXIS_UNIT}  # Example result: uliege_in.histogram.megabps.dat
 
 # Step 1: Read the series from the input data file, compute the histogram, and output the data to a new file
-python ./create_histogram.py $INPUT_FILE $OUTPUT_DAT_DIRECTORY/$OUTPUT_FILE.dat $NUM_SCALE
+echo Exporting histogram data to ${DAT_DIRECTORY}/${OUTPUT_FILE}.dat
+python ./create_histogram.py ${DAT_DIRECTORY}/${INPUT_FILE} ${DAT_DIRECTORY}/${OUTPUT_FILE}.dat ${OUTPUT_NUM_SCALE}
 
 # Step 2: Read the histogram data file and generate a plot
+echo Exporting histogram graph to ${PNG_DIRECTORY}/${OUTPUT_FILE}.png
 gnuplot -c histogram.gnuplot \
-$OUTPUT_DAT_DIRECTORY/$OUTPUT_FILE.dat $OUTPUT_PNG_DIRECTORY/$OUTPUT_FILE.png $NUM_SCALE-bps
+${DAT_DIRECTORY}/${OUTPUT_FILE}.dat ${PNG_DIRECTORY}/${OUTPUT_FILE}.png ${X_AXIS_UNIT}
