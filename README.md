@@ -4,6 +4,7 @@ The tools can achieve the following tasks:
 move between computers. See [split_pcap.sh][split_script].
 + Read a _.pcap_ file to discover __(i)__ L7 apps, __(ii)__ pps and bps per app, and __(iii)__ plot this data.
 See [plot_ts.sh][plot_script].
++ Read a time series _.dat_ file and create a histogram. See [plot_hist.sh][plot_histogram].
 
 
 ## Build
@@ -16,44 +17,65 @@ In order to install all necessary programs and libraries on an Ubuntu machine, p
 
 ### Split
 
-In order to split a _.pcap_ file into smaller ones, please execute script:  
+In order to split a _.pcap_ file into smaller ones, please make sure it's stored under directory __./pcap/__. <br/>
+Then execute script:  
 ```bash
-./split_pcap.sh pcap/<INPUT_PCAP_FILENAME> <OUTPUT_PCAP_FILENAME_PREFIX> <OUTPUT_PCAP_SIZE_MB>
+./split_pcap.sh <INPUT_PCAP_FILENAME> <OUTPUT_PCAP_SIZE_MB>
 ```
 
 e.g., 
 
 ```bash
-./split_pcap.sh pcap/caida-20140711-095700.UTC.pcap caida-2014 100
+./split_pcap.sh uliege_in.pcap 50
 ```
 
-will read _caida-20140711-095700.UTC.pcap_ and split it into smaller _.pcap_ files.<br/>
-Each file will have the prefix
-_caida-2014-partXXX_ and will be 100MB in size.
+will read _uliege_in.pcap_ and split it into smaller _.pcap_ files.<br/>
+Each file will be named _uliege_in-partXXX.pcap_ and will be 50MB in size.
 
 
 
-### Plot
+### Plot time series
 
-In order to read a _.pcap_ file and plot the traffic load per app (as already described), please execute script:  
+In order to read a _.pcap_ file and plot the traffic load (as already described), please make sure it's stored under
+directory __./pcap/__. <br/>
+Then execute script:  
 ```bash
-./plot_ts.sh pcap/<INPUT_PCAP_FILENAME> <OUTPUT_PNG_FILENAME_PREFIX>
+./plot_ts.sh <INPUT_PCAP_FILENAME>
 ```
 
 e.g., 
 
 ```bash
-./plot_ts.sh pcap/uliege_in.pcap uliege_in
+./plot_ts.sh uliege_in.pcap
 ```
 
-will read _uliege_in.pcap_ and will create __two__ plot files; _uliege_in-bps.png_ and _uliege_in-pps.png_
+will read _uliege_in.pcap_ and create __two__ plot files; _uliege_in.ts.bps.png_ and _uliege_in.ts.pps.png_
+
+
+
+### Histogram of time series
+
+In order to produce a histogram of the time series (as already described), please execute script:  
+```bash
+./plot_ts.sh <INPUT_TS_FILE> <OPTIONAL_X_AXIS_SCALE>
+```
+
+e.g., 
+
+```bash
+./plot_hist.sh uliege_in.ts.bps.dat mega
+```
+
+will read _uliege_in.ts.bps.dat_ and create a histogram _uliege_in.histogram.megabps.png_ where x-axis is in mega bps.
+<br/>If the second input argument (e.g., mega) was omitted, the x-axis would have been bps instead. 
 
 
 
 ## Directory structure
-+ __dat__: Contains all _.dat_ files as exported by [plot_ts.sh][plot_script]. These files hold the time series data in a format that can be read by [gnuplot][gnuplot_homepage].
-+ __pcap__: Contains all _.pcap_ files as exported by [split_pcap.sh][split_script]. These files can be provided as input to [plot_ts.sh][plot_script].
-+ __png__: Contains all _.png_ files as exported by [plot_ts.sh][plot_script].
++ __dat__: Contains all _.dat_ files as exported by [plot_ts.sh][plot_script] and [plot_hist.sh][plot_histogram].
++ __pcap__: Contains all _.pcap_ files as exported by [split_pcap.sh][split_script]. Input _.pcap_ files should be
+placed here as well.
++ __png__: Contains all _.png_ files as exported by [plot_ts.sh][plot_script] and [plot_hist.sh][plot_histogram].
 
 ## TODO
 List of things __TODO__:
@@ -65,5 +87,6 @@ Please [raise an issue][getting_help] on Github.
 
 [getting_help]: https://github.com/michailx/pcap-tools/issues
 [plot_script]: https://github.com/michailx/pcap-tools/blob/master/plot_ts.sh
+[plot_histogram]: https://github.com/michailx/pcap-tools/blob/master/plot_hist.sh
 [split_script]: https://github.com/michailx/pcap-tools/blob/master/split_pcap.sh
 [gnuplot_homepage]: http://www.gnuplot.info/

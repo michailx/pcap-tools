@@ -1,6 +1,7 @@
 PCAP directory
 =========
-This directory holds all _.pcap_ files as exported by script [split_pcap.sh][split_script]
+This directory holds all _.pcap_ files as exported by [split_pcap.sh][split_script]<br/>
+Input _.pcap_ files should be placed here as well.
 
 For more information please refer to the [pcap-tools README][main_readme] file.
 
