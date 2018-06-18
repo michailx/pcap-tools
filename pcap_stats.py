@@ -366,5 +366,5 @@ if __name__ == "__main__":
 
     print "Exporting statistics to files..."
     # Write result to external file
-    _export_stats(pps, user_input['output_file'] + '-pps.dat')
-    _export_stats(bps, user_input['output_file'] + '-bps.dat')
+    _export_stats(pps, user_input['output_file'] + '.ts.pps.dat')
+    _export_stats(bps, user_input['output_file'] + '.ts.bps.dat')
