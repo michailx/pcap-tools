@@ -14,6 +14,14 @@ fi
 # Input file name
 INPUT_FILE=$1
 
+# Check if input file in directory PCAP_DIRECTORY exists
+if [ -f ${PCAP_DIRECTORY}/${INPUT_FILE} ]; then
+	echo Successfully located file ${INPUT_FILE} in directory ${PCAP_DIRECTORY}
+else
+    echo Cannot locate file ${INPUT_FILE} in directory ${PCAP_DIRECTORY} ... Aborting!
+    exit
+fi
+
 # Input file name without the .pcap extension
 INPUT_FILE_NE=${1%?????}
 # In case there are any dots in the file name, replace them with underscores

@@ -9,11 +9,19 @@ echo User provided $# input arguments: $@
 if [ $# -ne 2 ]; then
 	echo Please provide 2 command-line arguments: INPUT_FILE and OUTPUT_FILE_SIZE_MB
 	echo E.g.: uliege_in.pcap 50
-    exit
+	exit
 fi
 
 # Input file name
 INPUT_FILE=$1
+
+# Check if input file in directory PCAP_DIRECTORY exists
+if [ -f ${PCAP_DIRECTORY}/${INPUT_FILE} ]; then
+	echo Successfully located file ${INPUT_FILE} in directory ${PCAP_DIRECTORY}
+else
+    echo Cannot locate file ${INPUT_FILE} in directory ${PCAP_DIRECTORY} ... Aborting!
+    exit
+fi
 
 # Input file name without the .pcap extension
 OUTPUT_FILES=${1%?????}
