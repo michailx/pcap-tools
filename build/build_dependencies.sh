@@ -18,6 +18,12 @@ install_pypcap()
         sudo pip install pypcap
 }
 
+install_mathematics_libraries()
+{
+        sudo pip install scipy numpy
+}
+
 install_gnuplot
 install_dpkt
 install_pypcap
+install_mathematics_libraries
