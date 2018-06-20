@@ -61,7 +61,8 @@ def _get_ip_pkt(buf, datalink, timestamp=None):
         try:
             ip_pkt = dpkt.ip.IP(buf)
         except dpkt.UnpackError as ex:
-            print "Unpack error at time", timestamp, "ERR:", ex
+            # Will trigger for non IP packets, e.g., IPv6.
+            # print "Unpack error at time", '{0:.10f}'.format(timestamp), "ERR:", ex
             return None
     else:
         print "Datalink is (value)", datalink, ". Don't know how to handle this, exiting..."
@@ -73,39 +74,64 @@ def _get_ip_pkt(buf, datalink, timestamp=None):
     return ip_pkt
 
 
+def _pkt_is_ip_fragment(ip_pkt):
+    """
+    Parses an IPv4 packet and decided whereather is it a fragment (or not). Returns True if Flag "More Fragments" is set
+    or the "Fragment Offset" is non-zero.
+    """
+    # Pull out fragment information (flags and offset all packed into off field, so use bitmasks)
+
+    more_fragments = bool(ip_pkt.off & dpkt.ip.IP_MF)
+    fragment_offset = ip_pkt.off & dpkt.ip.IP_OFFMASK
+    # do_not_fragment = bool(ip_pkt.off & dpkt.ip.IP_DF)  # Actually, I don't need this flag.
+
+    if more_fragments or (fragment_offset != 0):
+        return True
+    else:
+        return False
+
+
 def _get_ip_pkt_ports(buf, datalink, timestamp=None):
     """
     Scans the IP packet and returns tuple (IP_PROTO, L4_LOW_PORT, L4_HIGH_PORT) for UDP or TCP segment. Otherwise
     returns tuple (IP_PROTO, None, None).
     """
+    # Get IP Header
     ip_pkt = _get_ip_pkt(buf, datalink, timestamp)
     if ip_pkt is None:
         return None
 
+    # Check if packet is an IP Fragment
+    if _pkt_is_ip_fragment(ip_pkt):
+        # FIXME: Returning -1 as ports for IPv4 fragments since I cannot get the port number
+        return ip_pkt.p, -1, -1
+
     if ip_pkt.p in [dpkt.ip.IP_PROTO_TCP, dpkt.ip.IP_PROTO_UDP]:
         # Get Layer4 PDU
         transport = ip_pkt.data
-        try:
-            # FIXME: Check if src < 1023 < dst OR src > 1023 > dst, in an attempt to add less tuples to the set()
-            # FIXME: The basis for this assumption is the client<>server model where client port > 1023 whereas
-            # FIXME: the server is using a well-known port < 1024.
-            if (transport.sport < 1024) and (transport.dport >= 1024):
-                #
-                result = (ip_pkt.p, transport.sport, None)
-            elif (transport.dport < 1024) and (transport.sport >= 1024):
-                #
-                result = (ip_pkt.p, transport.dport, None)
-            else:
-                # FIXME: Adding both ports in the tuple since checks above were inconclusive.
-                if transport.sport < transport.dport:
-                    # Always put the lower port nbr in position tuple[1]. This will avoid duplicates.
-                    result = (ip_pkt.p, transport.sport, transport.dport)
+        # Double-check that the IP payload is in fact a TCP or UDP segment:
+        if (isinstance(transport, dpkt.tcp.TCP) or isinstance(transport, dpkt.udp.UDP)):
+            try:
+                # FIXME: Check if src < 1023 < dst OR src > 1023 > dst, in an attempt to add less tuples to the set()
+                # FIXME: The basis for this assumption is the client<>server model where client port > 1023 whereas
+                # FIXME: the server is using a well-known port < 1024.
+                if (transport.sport < 1024) and (transport.dport >= 1024):
+                    #
+                    result = (ip_pkt.p, transport.sport, None)
+                elif (transport.dport < 1024) and (transport.sport >= 1024):
+                    #
+                    result = (ip_pkt.p, transport.dport, None)
                 else:
-                    result = (ip_pkt.p, transport.dport, transport.sport)
+                    # FIXME: Adding both ports in the tuple since checks above were inconclusive.
+                    if transport.sport < transport.dport:
+                        # Always put the lower port nbr in position tuple[1]. This will avoid duplicates.
+                        result = (ip_pkt.p, transport.sport, transport.dport)
+                    else:
+                        result = (ip_pkt.p, transport.dport, transport.sport)
 
-        except AttributeError as ex:
-            print "Exception at time", timestamp, ", ERROR:", ex
-            result = (ip_pkt.p, None, None)
+            except AttributeError as ex:
+                print "Exception at time", '{0:.10f}'.format(timestamp), ", ERROR:", ex
+                result = (ip_pkt.p, None, None)
     else:
         result = (ip_pkt.p, None, None)
 
@@ -142,6 +168,10 @@ def _get_trace_apps(ports=set()):
     apps = {}
 
     for (ip_proto, low_port, high_port) in ports:
+        if (low_port, high_port) == (-1, -1):
+            # FIXME: This handles IP Fragments
+            apps[(ip_proto, low_port)] = _getprotobynumber(ip_proto) + "-fragment"
+
         if ip_proto in [dpkt.ip.IP_PROTO_TCP, dpkt.ip.IP_PROTO_UDP]:
             # TCP or UDP packet
 
