@@ -76,7 +76,7 @@ def _get_ip_pkt(buf, datalink, timestamp=None):
 
 def _pkt_is_ip_fragment(ip_pkt):
     """
-    Parses an IPv4 packet and decided whereather is it a fragment (or not). Returns True if Flag "More Fragments" is set
+    Parses an IPv4 packet and decided whether is it a fragment (or not). Returns True if Flag "More Fragments" is set
     or the "Fragment Offset" is non-zero.
     """
     # Pull out fragment information (flags and offset all packed into off field, so use bitmasks)
@@ -132,6 +132,11 @@ def _get_ip_pkt_ports(buf, datalink, timestamp=None):
             except AttributeError as ex:
                 print "Exception at time", '{0:.10f}'.format(timestamp), ", ERROR:", ex
                 result = (ip_pkt.p, None, None)
+
+        else:
+            #
+            print "Time:", '{0:.10f}'.format(timestamp), ", Packet: PROTO", ip_pkt.p, " Not IP frag, No TCP/UDP payload"
+            result = None
     else:
         result = (ip_pkt.p, None, None)
 
@@ -387,7 +392,7 @@ if __name__ == "__main__":
     scanned_ports = _scan_trace_ports(user_input['input_file'])
     print "Discovered,", len(scanned_ports), "ports (i.e., IP_PROTO, LOW_NBR_PORT, HIGH_NBR_PORT)."
     apps = _get_trace_apps(scanned_ports)
-    print "Discovered", len(apps), "apps (i.e., IP_PROTO, PORT). Apps:", apps
+    print "Discovered", len(apps), "apps (i.e., IP_PROTO, PORT)."
 
     pps, bps = _get_trace_stats(user_input['input_file'], apps)
     # Both pps and bps are lists with index (keys) the elapsed time in seconds i.e., the x-axis of a time series.
