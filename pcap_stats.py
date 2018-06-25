@@ -134,8 +134,10 @@ def _get_ip_pkt_ports(buf, datalink, timestamp=None):
                 result = (ip_pkt.p, None, None)
 
         else:
+            # IP Proto value is 6 or 17 (TCP and UDP respectively) but the Layer4 header isn't. Moreover the IPv4
+            # packet is not fragmented. It is probably malformed and I will drop it.
             #
-            print "Time:", '{0:.10f}'.format(timestamp), ", Packet: PROTO", ip_pkt.p, " Not IP frag, No TCP/UDP payload"
+            # print "Time:", '{0:.10f}'.format(timestamp), "Packet IP PROTO:", ip_pkt.p, "No TCP/UDP payload!"
             result = None
     else:
         result = (ip_pkt.p, None, None)
@@ -331,7 +333,7 @@ def _getprotobynumber(ip_proto):
     For example, providing input argument 6 will return 'tcp'.
     FIXME: Isn't there a better way to do this?
     """
-    transport_protocols = {1: 'icmp', 6: 'tcp', 17: 'udp', 41: 'ipv6ip', 47: 'gre', 50: 'esp'}
+    transport_protocols = {1: 'icmp', 2: 'igmp', 6: 'tcp', 17: 'udp', 41: 'ipv6ip', 47: 'gre', 50: 'esp', 103: 'pim'}
     try:
         return transport_protocols[ip_proto]
     except KeyError as ex:
