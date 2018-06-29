@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 
+from collections import OrderedDict
 from numpy import amin
 from scipy.stats import shapiro
 from scipy.stats import normaltest
@@ -39,23 +40,23 @@ def d_agostino_k_squared_test(data, alpha=0.05):
 
 
 # Anderson-Darling Test
-def anderson_darling_test(data):
-    statistic, critical_values, significance_level = anderson(data)
+def anderson_darling_test(data, distribution='norm'):
+    statistic, critical_values, significance_level = anderson(data, distribution)
     # statistic is a float, whereas both critical_values and significance_level are Numpy arrays
-    # The Anderson test returns a critical value for each significance level. The significance levels for a Gaussian
-    # distribution are 15%, 10%, 5%, 2.5% and 1%, i.e., both arrays will have 5 elements.
 
-    # Instead of comparing the statistics against each critical value (and getting a separate result for each
-    # significance level) I will just return True if the series are Gaussian-like for ALL significance levels.
-    minimum_cv = amin(critical_values)
-    if statistic < minimum_cv:
-        # Fails to reject the null hypothesis, therefore it looks Gaussian
-        gaussian_like = True
-    else:
-        # Rejects the null hypothesis, therefore it doesn't look Gaussian
-        gaussian_like = False
+    result = OrderedDict()
 
-    return gaussian_like
+    for i in range(len(critical_values)):
+        sl = significance_level[i]
+        cv = critical_values[i]
+        if statistic < cv:
+            # Fails to reject the null hypothesis, therefore it matches the selected distribution
+            result[(sl, cv)] = True
+        else:
+            # Rejects the null hypothesis, therefore it doesn't match the distribution
+            result[(sl, cv)] = False
+
+    return result
 
 
 if __name__ == "__main__":
@@ -73,7 +74,27 @@ if __name__ == "__main__":
 
     # Run tests and print result
     print "Series:", user_input['input_file']
-    print "Distribution is Gaussian (or Gaussian-like) ..."
+    print "Checking if distribution is Gaussian ..."
     print "* Shapiro-Wilk test:", shapiro_wilk_test(series, user_input['alpha'])
     print "* D’Agostino’s K^2 test:", d_agostino_k_squared_test(series, user_input['alpha'])
-    print "* Anderson-Darling test:", anderson_darling_test(series)
+    print "* Anderson-Darling test:"
+    for k, v in anderson_darling_test(series).viewitems():
+        print 'significance level: {0}, critical value: {1}, result: {2}'.format(k[0], k[1], v)
+
+    print "\n"
+    print "Checking if distribution is Exponential ..."
+    print "* Anderson-Darling test:"
+    for k, v in anderson_darling_test(series, 'expon').viewitems():
+        print 'significance level: {0}, critical value: {1}, result: {2}'.format(k[0], k[1], v)
+
+    print "\n"
+    print "Checking if distribution is Logistic ..."
+    print "* Anderson-Darling test:"
+    for k, v in anderson_darling_test(series, 'logistic').viewitems():
+        print 'significance level: {0}, critical value: {1}, result: {2}'.format(k[0], k[1], v)
+
+    print "\n"
+    print "Checking if distribution is Gumbel (Extreme Value Type I) ..."
+    print "* Anderson-Darling test:"
+    for k, v in anderson_darling_test(series, 'gumbel').viewitems():
+        print 'significance level: {0}, critical value: {1}, result: {2}'.format(k[0], k[1], v)
