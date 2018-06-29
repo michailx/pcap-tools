@@ -73,7 +73,13 @@ if __name__ == "__main__":
     series = read_series_file(user_input['input_file'])
 
     # Run tests and print result
+    print "\n"
+    line = (len("Series:" + user_input['input_file']) + 1)*'='
+    print line
     print "Series:", user_input['input_file']
+    print line
+
+    print "\n"
     print "Checking if distribution is Gaussian ..."
     print "* Shapiro-Wilk test:", shapiro_wilk_test(series, user_input['alpha'])
     print "* D’Agostino’s K^2 test:", d_agostino_k_squared_test(series, user_input['alpha'])
